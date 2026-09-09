@@ -1,0 +1,11 @@
+.tools/
+.work/
+input/*
+!input/.gitkeep
+output/*
+!output/.gitkeep
+*.img
+*.img.xz
+*.zip
+*.log
+
