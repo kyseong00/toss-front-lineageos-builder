@@ -123,12 +123,22 @@ function Invoke-NativeCapture {
         [string[]]$ArgumentList = @(),
         [int[]]$AllowedExitCodes = @(0)
     )
-    $output = @(& $FilePath @ArgumentList 2>&1)
-    $exitCode = $LASTEXITCODE
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Windows PowerShell 5.1 turns native stderr redirected with 2>&1 into
+        # ErrorRecord objects. debugfs always prints its version to stderr, so
+        # temporarily keep those records non-terminating and trust the process
+        # exit code instead.
+        $ErrorActionPreference = 'Continue'
+        $output = @(& $FilePath @ArgumentList 2>&1)
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
     if ($AllowedExitCodes -notcontains $exitCode) {
         throw "Command failed ($exitCode): $FilePath $($ArgumentList -join ' ')`n$($output -join "`n")"
     }
-    return $output
+    return @($output | ForEach-Object { $_.ToString() })
 }
 
 function New-AsciiPathMapping {
