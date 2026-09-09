@@ -1,5 +1,7 @@
 # 토스 프론트 1.5세대용 LineageOS 18.1 + Pico GApps 빌더
 
+[![ZIP 다운로드](https://img.shields.io/badge/ZIP-다운로드-2ea44f?style=for-the-badge&logo=github)](https://github.com/kyseong00/toss-front-lineageos-builder/archive/refs/heads/main.zip)
+
 토스 프론트 **1.5세대 PLF02WH 전용** PowerShell 빌더입니다. 직접 백업한 순정 `super.img`를 이용해 LineageOS 18.1과 Google 앱이 포함된 펌웨어를 만듭니다.
 
 > PLF00WH(1세대)와 2세대에는 사용할 수 없습니다.
