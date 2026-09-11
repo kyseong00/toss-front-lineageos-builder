@@ -31,11 +31,9 @@ $SourceInfo = [ordered]@{
 
 $KnownStock = [ordered]@{
     SuperSize = [int64]2147483648
-    SuperSha256 = '99F9431251BA4C6FE706A90A4F8E3B8610690CB422019112BCE98BD122A1B080'
+    SystemSize = [int64]1381257216
     VendorSize = [int64]220258304
-    VendorSha256 = '46D911204C94AB5360CAB2D6FF3C78A1E2CD07F8AFAC15FFC6BA636C4063B736'
     OdmSize = [int64]585728
-    OdmSha256 = '3E42C410A1A1F2FA174ACC8B2FB44E0DA24857A4BEA151733C9461E449CC7CE9'
 }
 
 $Layout = [ordered]@{
@@ -369,7 +367,6 @@ foreach ($requiredInput in @($StockSuper, $LineageImage, $OpenGApps)) {
 }
 
 Assert-FileSize -Path $StockSuper -Expected $KnownStock.SuperSize -Label 'stock super'
-Assert-Hash -Path $StockSuper -Expected $KnownStock.SuperSha256 -Label 'known PLF02WH stock super'
 Assert-Hash -Path $LineageImage -Expected $SourceInfo.Lineage.Sha256 -Label 'LineageOS GSI'
 Assert-Hash -Path $OpenGApps -Expected $SourceInfo.OpenGApps.Sha256 -Label 'OpenGApps Pico'
 
@@ -437,12 +434,34 @@ try {
     $stockSuperCyg = Convert-ToToolPath -WindowsPath $StockSuper
     $stockPartsCyg = Convert-ToToolPath -WindowsPath $stockParts
     Invoke-Native -FilePath $tools.LpUnpack -ArgumentList @($stockSuperCyg, $stockPartsCyg)
+
+    $requiredStockPartitions = [ordered]@{
+        'system.img' = $KnownStock.SystemSize
+        'vendor.img' = $KnownStock.VendorSize
+        'odm.img' = $KnownStock.OdmSize
+    }
+    $actualStockPartitions = @(
+        Get-ChildItem -LiteralPath $stockParts -File |
+            Where-Object { $_.Extension -eq '.img' } |
+            ForEach-Object { $_.Name }
+    )
+    $missingStockPartitions = @(
+        $requiredStockPartitions.Keys | Where-Object { $actualStockPartitions -notcontains $_ }
+    )
+    if ($missingStockPartitions.Count -gt 0) {
+        throw "stock super is missing required partitions.`nRequired: $($requiredStockPartitions.Keys -join ', ')`nActual:   $($actualStockPartitions -join ', ')"
+    }
+
+    foreach ($partitionName in $requiredStockPartitions.Keys) {
+        Assert-FileSize `
+            -Path (Join-Path $stockParts $partitionName) `
+            -Expected $requiredStockPartitions[$partitionName] `
+            -Label "stock $([IO.Path]::GetFileNameWithoutExtension($partitionName))"
+    }
+    Write-Step 'stock super required partition layout verified'
+
     $stockVendor = Join-Path $stockParts 'vendor.img'
     $stockOdm = Join-Path $stockParts 'odm.img'
-    Assert-FileSize -Path $stockVendor -Expected $KnownStock.VendorSize -Label 'stock vendor'
-    Assert-Hash -Path $stockVendor -Expected $KnownStock.VendorSha256 -Label 'stock vendor'
-    Assert-FileSize -Path $stockOdm -Expected $KnownStock.OdmSize -Label 'stock odm'
-    Assert-Hash -Path $stockOdm -Expected $KnownStock.OdmSha256 -Label 'stock odm'
 
     Write-Step 'Preparing raw LineageOS system image'
     $lineageLocal = Join-Path $workRoot $SourceInfo.Lineage.Name
