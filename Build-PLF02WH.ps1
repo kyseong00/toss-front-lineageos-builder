@@ -31,9 +31,20 @@ $SourceInfo = [ordered]@{
 
 $KnownStock = [ordered]@{
     SuperSize = [int64]2147483648
-    SystemSize = [int64]1381257216
+    # Reference only. The stock system partition is replaced by the GSI, and
+    # firmware builds differ here (761: 1381257216, 603: 1276092416).
+    ReferenceSystemSize = [int64]1381257216
     VendorSize = [int64]220258304
     OdmSize = [int64]585728
+}
+
+# Values read from /vendor/build.prop of tested PLF02WH firmware builds.
+# Build 761 reports TOSS_Front and build 603 reports TOSS_Terminal.
+$KnownVendor = [ordered]@{
+    Devices = @('TOSS_Front', 'TOSS_Terminal')
+    Board = 'p681x'
+    AndroidVersion = '11'
+    TestedBuilds = @('603', '761')
 }
 
 $Layout = [ordered]@{
@@ -436,7 +447,7 @@ try {
     Invoke-Native -FilePath $tools.LpUnpack -ArgumentList @($stockSuperCyg, $stockPartsCyg)
 
     $requiredStockPartitions = [ordered]@{
-        'system.img' = $KnownStock.SystemSize
+        'system.img' = $null
         'vendor.img' = $KnownStock.VendorSize
         'odm.img' = $KnownStock.OdmSize
     }
@@ -453,15 +464,40 @@ try {
     }
 
     foreach ($partitionName in $requiredStockPartitions.Keys) {
+        if ($null -eq $requiredStockPartitions[$partitionName]) { continue }
         Assert-FileSize `
             -Path (Join-Path $stockParts $partitionName) `
             -Expected $requiredStockPartitions[$partitionName] `
             -Label "stock $([IO.Path]::GetFileNameWithoutExtension($partitionName))"
     }
+    $stockSystemSize = (Get-Item -LiteralPath (Join-Path $stockParts 'system.img')).Length
+    if ($stockSystemSize -ne $KnownStock.ReferenceSystemSize) {
+        Write-Warning "stock system size is $stockSystemSize bytes (reference: $($KnownStock.ReferenceSystemSize)). This partition is replaced by the GSI, so the build continues."
+    }
     Write-Step 'stock super required partition layout verified'
 
     $stockVendor = Join-Path $stockParts 'vendor.img'
     $stockOdm = Join-Path $stockParts 'odm.img'
+
+    Write-Step 'Checking stock vendor build.prop'
+    $vendorProp = (Invoke-NativeCapture -FilePath $tools.DebugFs -ArgumentList @(
+        '-R', 'cat /build.prop', (Convert-ToToolPath -WindowsPath $stockVendor)
+    )) -join "`n"
+    $deviceMatch = [regex]::Match($vendorProp, '(?m)^ro\.product\.vendor\.device=(\S+)\s*$')
+    if (-not $deviceMatch.Success -or $KnownVendor.Devices -notcontains $deviceMatch.Groups[1].Value) {
+        $foundDevice = if ($deviceMatch.Success) { $deviceMatch.Groups[1].Value } else { '(missing)' }
+        throw "stock vendor device is $foundDevice. Expected one of: $($KnownVendor.Devices -join ', '). Wrong device or generation."
+    }
+    $fingerprintPattern = "(?m)^ro\.vendor\.build\.fingerprint=SUNMI/$($KnownVendor.Board)/[^:]+:$($KnownVendor.AndroidVersion)/(\d+)/"
+    $fingerprintMatch = [regex]::Match($vendorProp, $fingerprintPattern)
+    if (-not $fingerprintMatch.Success) {
+        throw "Unexpected stock vendor fingerprint. Expected SUNMI/$($KnownVendor.Board) Android $($KnownVendor.AndroidVersion)."
+    }
+    $vendorBuild = $fingerprintMatch.Groups[1].Value
+    if ($KnownVendor.TestedBuilds -notcontains $vendorBuild) {
+        Write-Warning "Stock vendor build $vendorBuild has not been tested (tested: $($KnownVendor.TestedBuilds -join ', ')). Proceed with care."
+    }
+    Write-Step "stock vendor verified: $($deviceMatch.Groups[1].Value), build $vendorBuild"
 
     Write-Step 'Preparing raw LineageOS system image'
     $lineageLocal = Join-Path $workRoot $SourceInfo.Lineage.Name
@@ -509,6 +545,10 @@ try {
             throw "Failed to remove GSI path: $imagePath"
         }
     }
+    # The GSI uses ext4 shared_blocks. debugfs rm frees blocks that other files
+    # still share, so rebuild the block bitmap before writing GApps. Otherwise
+    # GApps data overwrites unrelated system files.
+    Invoke-Native -FilePath $tools.E2Fsck -ArgumentList @('-fy', $systemImageCyg) -AllowedExitCodes @(0, 1, 2)
 
     Write-Step 'Extracting the selected OpenGApps Pico components'
     $gappsZipRoot = Join-Path $workRoot 'gapps-zip'

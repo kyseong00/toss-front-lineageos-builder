@@ -18,6 +18,8 @@
 
 먼저 [BACKUP.md](BACKUP.md)를 참고해 순정 `super.img`를 백업한 뒤 `input\stock-super.img`에 넣어 주세요. 스크립트가 올바른 파일인지 자동으로 확인합니다.
 
+확인된 순정 펌웨어는 빌드 761과 603입니다. 다른 빌드 번호도 구조가 같으면 경고만 띄우고 빌드를 계속합니다.
+
 ## 실행
 
 `Build.bat`을 더블클릭한 뒤, 안내에 따라 `super.img` 파일을 창으로 끌어다 놓고 Enter 키를 누릅니다. 필요한 도구 설치와 빌드가 자동으로 진행됩니다.
@@ -35,7 +37,11 @@ output\super_PLF02WH_lineage18.1_gapps_pico.img.manifest.json
 
 빌드된 펌웨어를 플래싱할 때는 **`super` 파티션 하나만** 선택합니다. RKDevTool에서 장치가 `Found One LOADER Device`로 인식되면 `Download Image` 표의 `super` 행에 결과 파일을 지정하고, 해당 행만 선택한 상태에서 `Run`을 누릅니다.
 
+RKDevTool은 **v2.96**을 사용해 주세요. v3.37은 정확히 2 GiB인 결과 파일을 `Image is larger than partition size`라며 거부합니다.
+
 처음 부팅되지 않으면 사용자 데이터 초기화가 필요할 수 있습니다. 초기화하면 모든 데이터가 지워지므로 백업 후 진행해 주세요. 부팅 화면에서 10분 이상 멈추면 다른 파티션을 추가로 플래싱하지 말고 로그와 백업 상태를 확인해 주세요.
+
+플래싱이 끝나면 기기가 자동으로 재부팅됩니다. 사용자 데이터를 지우려면 전원을 뺀 뒤 Loader 모드로 다시 들어가서 지워야 합니다. 그대로 진행하면 `failed to erase sectors` 오류가 납니다.
 
 ## 복구
 
